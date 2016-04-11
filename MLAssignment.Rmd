@@ -1,0 +1,99 @@
+---
+title: "Machine Learning Assignment: Human Activity Recognition"
+author: "Sangar"
+output: html_document
+---
+
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. 
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this assignment, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website [here](http://groupware.les.inf.puc-rio.br/har) 
+
+We are going to explore and pre-process the data. We are going to dta into three groups: train, test and validation data. We will then select a model for the prediction of train data using random forest method. Finally we validate our model with cross-validation and prove the model with the test data.
+
+
+### Libraries required
+```{r}
+ # Libraries required for the study
+ library(caret)
+ library(dplyr)
+ library(randomForest)
+```
+
+### Loading of Data
+```{r}
+  data <- tbl_df(read.csv("pml-training.csv",header=TRUE))
+```
+
+We can see the information of `r dim(data)[2]` variables. A critical question is if all the variables are required for predicting the variable classe? 
+
+We can see the distribution of the variable classe in our training data:
+```{r}
+  table(data$classe)
+```
+
+### Cleaning of Data
+Removing variables of mostly NA and creating a list of columns to keep
+```{r}
+# exclude near zero variance features
+zeros <- nearZeroVar(data)
+data <- data[, -zeros]
+
+# exclude columns with m40% ore more missing values exclude descriptive
+# columns like name etc
+cntlength <- sapply(data, function(x) {
+    sum(!(is.na(x) | x == ""))
+})
+nullcol <- names(cntlength[cntlength < 0.6 * length(data$classe)])
+
+namecols <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window")
+cols <- c(namecols, nullcol)
+clean_data <- data[, !names(data) %in% cols]
+```
+
+ 
+Now, we have only `r dim(clean_data)[2]` variables left, which is more reasonnable, although still large. Its worth nothing that, at that stage, `classe` is the only factor left in the dataset.
+
+### Training & Test Data
+Now, we want to split the training data into a train data and validation data along the `classe` variable to ensure we have representative of all the classes in the test set.
+```{r}
+set.seed(12345)
+inTrain <- createDataPartition(clean_data$classe, p = 0.8, list = FALSE)
+training <- clean_data[inTrain, ]
+testing <- clean_data[-inTrain, ]
+```
+
+
+## Random forest our model
+Now, we construct our model with random forest what select the variables more important for the linear regression.
+```{r}
+rfModel <- randomForest(classe ~ ., data = training, importance = TRUE, ntrees = 10)
+```
+
+
+We can see the importance ot our model
+```{r}
+imps <- varImp(rfModel)
+order(imps)
+```
+ 
+The confusion matrix for the training data compared witgh the prediction of the model in a training data and classe:
+```{r}
+ptraining <- predict(rfModel, training)
+print(confusionMatrix(ptraining, training$classe))
+```
+
+##Predictions on the testing dataset
+
+```{r}
+  validation <- predict(rfModel, testing)
+  print(confusionMatrix(validation, testing$classe))
+```
+
+The result is amazing. good accuray, sensitivity and small error.
+Finally, we can prove the model for the test data:
+```{r}
+  testdata <- tbl_df(read.csv("pml-testing.csv",header=TRUE))
+  test_model <- predict(rfModel, testdata)
+  test_model
+```
